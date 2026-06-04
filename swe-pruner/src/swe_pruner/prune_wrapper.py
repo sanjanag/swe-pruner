@@ -489,7 +489,7 @@ class SwePrunerForCodePruning(SwePrunerForCodeCompression):
         with torch.no_grad():
             with torch.amp.autocast(
                 device_type="cuda" if torch.cuda.is_available() else "cpu",
-                dtype=torch.float16,
+                dtype=torch.bfloat16,
             ):
                 outputs: SwePrunerOutput = self(
                     input_ids=input_ids, attention_mask=attention_mask

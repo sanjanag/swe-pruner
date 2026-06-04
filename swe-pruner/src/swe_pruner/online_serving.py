@@ -48,7 +48,13 @@ async def startup_event():
             logger.error(error_msg)
             raise FileNotFoundError(error_msg)
 
-        model = SwePrunerForCodePruning.from_pretrained(model_name_or_path)
+        # Load in bf16 on GPU so flash-attention runs in the model's native
+        # training precision; otherwise transformers defaults to fp32 and the
+        # attention path silently downcasts to fp16.
+        import torch as _torch
+
+        _load_kwargs = {"dtype": _torch.bfloat16} if _torch.cuda.is_available() else {}
+        model = SwePrunerForCodePruning.from_pretrained(model_name_or_path, **_load_kwargs)
         logger.info(f"Model loaded successfully from {model_name_or_path}")
     except Exception as e:
         logger.error(f"Failed to load model: {e}")
