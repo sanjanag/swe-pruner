@@ -84,59 +84,7 @@ llm_experiments/swe-pruner-py/
 
 ## Build your own training data
 
-The full pipeline: **pull code → dedup → query gen → score → label → train**.
-
-### JSONL format at each stage
-
-Each line is one JSON object. Fields accumulate as the pipeline progresses.
-
-| Stage | Fields | Note |
-|-------|--------|------|
-| **1. Pull** | `code`, `repo` | `repo`: `repo_id/file_path`. Long files chunked by `--max-lines`/`--min-lines`. |
-| **2. Dedup** | same | Rows whose `code` appears in the eval set are removed. |
-| **3. Query gen** | + `query` | One generated query per code snippet. |
-| **4. Score** | + `score` | `score` ∈ [0,1]: query–code relevance from reranker. |
-| **5. Label** | + `kept_frags` | 1-based line indices to keep (line-level pruning label). |
-| **6. Train** | must have: `query`, `code`, `kept_frags`, `score` | Extra fields ignored. |
-
-Example labeled line:
-```json
-{"query": "Where is auth configured?", "code": "def foo():\n  x = 1\n  return x", "score": 0.92, "kept_frags": [1, 3]}
-```
-
-### Step-by-step commands
-
-**1. Pull GitHub code (ModelScope)**
-```bash
-python -m train.scripts.gh_code_dataset --output-prefix ghcode --want-rows 200000 --lang python
-```
-We used the first 200k samples. Scaling to 2M did not improve results much — better labeling models or a larger base model (e.g. Qwen3-Reranker-8B) may help more.
-
-**2. Dedup against eval set**
-```bash
-python -m train.scripts.dedup --final-dataset final_dataset.jsonl --eval-dataset eval_ds.jsonl --output final_dedup.jsonl
-```
-
-**3. Generate queries**
-```bash
-python -m train.inference.qgen -i data.jsonl -o generated_queries.jsonl --model <vLLM_MODEL_PATH>
-```
-
-**4. Score (query, code) pairs**
-```bash
-python -m train.inference.score -i generated_queries.jsonl -o scored.jsonl --model <RERANKER_MODEL_PATH>
-```
-
-**5. Line-level labeling**
-```bash
-python -m train.inference.build_label \
-  --input-file scored.jsonl \
-  --output-jsonl labeled.jsonl \
-  --model-name <vLLM_MODEL_PATH> \
-  --tensor-parallel-size 8
-```
-
-**6. Train** — see [Quick start](#3-launch-training) above.
+To generate your own line-level pruning dataset from scratch (pull → dedup → query gen → score → label), see the [`data_pipeline`](../data_pipeline/README.md) folder. Once you have a labeled JSONL with `query`, `code`, `kept_frags`, and `score`, feed it to the [Quick start](#3-launch-training) above.
 
 ---
 
@@ -187,7 +135,5 @@ python -m train.inference.build_label \
 ## Shell scripts
 
 - **train_llm.sh** – `./train/train_llm.sh <NUM_GPUS> <INPUT_JSONL> [--model-name MODEL] ...`
-- **qgen.sh** – `./train/qgen.sh <DATASET_NAME> <RESULT_DIR> [--model MODEL]`
-- **label.sh** – `./train/label.sh <DATASET_NAME> <RESULT_DIR> [--model-name MODEL] ...`
 
-All run from repo root and forward extra arguments to the underlying Python module.
+Runs from repo root and forwards extra arguments to the underlying Python module. The data-pipeline scripts (`qgen.sh`, `label.sh`) now live in [`../data_pipeline`](../data_pipeline/README.md).

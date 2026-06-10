@@ -12,12 +12,12 @@ from rich.console import Console
 from tqdm import tqdm
 from vllm import LLM, SamplingParams
 
-from train.core.structure import CodeGroupItem
-from train.core.prompts.llm_label import (
+from data_pipeline.core.structure import CodeGroupItem
+from data_pipeline.core.prompts.llm_label import (
     llm_label_prompt_template_for_line,
     fetch_llm_label_from_output,
 )
-from train.utils.line_chunker import split_code_into_lines
+from data_pipeline.utils.line_chunker import split_code_into_lines
 
 app = typer.Typer(help="Build line-level labels (kept_frags) using vLLM; output is JSONL only")
 console = Console()
