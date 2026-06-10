@@ -17,3 +17,17 @@
 
 **/answer-*
 **/traj-*
+
+# Local tooling / logs
+.claude/
+
+# Large released dataset (distributed via Google Drive, not git)
+data/*.jsonl
+
+# Dashboard generated output and result data
+dashboard/dashboard.html
+dashboard/*results*.json
+dashboard/review_*.json
+
+# Local model dirs
+swe-pruner/qwen3-reranker-0.6b/
