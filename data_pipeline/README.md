@@ -2,7 +2,7 @@
 
 Build your own line-level pruning training data from scratch.
 
-The full pipeline: **pull code → dedup → query gen → score → label → train**. Stages 1–5 live here; training (stage 6) lives in [`../train`](../train/README.md).
+The full pipeline: **pull code → dedup → query gen → score → label → quality filter → train**. Stages 1–6 live here; training (stage 7) lives in [`../train`](../train/README.md).
 
 Run all commands from the **repository root** so that the `data_pipeline` package is importable.
 
@@ -14,7 +14,7 @@ Run all commands from the **repository root** so that the `data_pipeline` packag
 pip install torch transformers vllm modelscope torchmetrics typer rich pydantic tqdm
 ```
 
-`modelscope` is only needed for stage 1 (pull); `vllm` is needed for stages 3–5.
+`modelscope` is only needed for stage 1 (pull); `vllm` is needed for stages 3–6.
 
 ---
 
@@ -29,12 +29,18 @@ Each line is one JSON object. Fields accumulate as the pipeline progresses.
 | **3. Query gen** | + `query` | One generated query per code snippet. |
 | **4. Score** | + `score` | `score` ∈ [0,1]: query–code relevance from reranker. |
 | **5. Label** | + `kept_frags` | 1-based line indices to keep (line-level pruning label). |
-| **6. Train** | must have: `query`, `code`, `kept_frags`, `score` | Extra fields ignored. |
+| **6. Quality filter** | + `evaluation` | LLM-as-a-Judge verdict (nested dict); optionally drops low-quality rows. |
+| **7. Train** | must have: `query`, `code`, `kept_frags`, `score` | Extra fields (incl. `evaluation`) ignored. |
 
 Example labeled line:
 ```json
 {"query": "Where is auth configured?", "code": "def foo():\n  x = 1\n  return x", "score": 0.92, "kept_frags": [1, 3]}
 ```
+
+The `evaluation` dict added in stage 6 has keys `reasoning`, `query_quality`
+(good/acceptable/poor), `deletion_relevance` (appropriate/minimal/excessive),
+`semantic_preservation` (preserved/partially_preserved/broken), and
+`overall_quality` (low/medium/high).
 
 ---
 
@@ -70,7 +76,23 @@ python -m data_pipeline.inference.build_label \
   --tensor-parallel-size 8
 ```
 
-**6. Train** — see [`../train/README.md`](../train/README.md).
+**6. Quality filter (LLM-as-a-Judge)**
+```bash
+python -m data_pipeline.inference.quality_filter \
+  --input-file labeled.jsonl \
+  --output-jsonl judged.jsonl \
+  --filtered-jsonl high_quality.jsonl \
+  --keep-levels high \
+  --model-name <JUDGE_MODEL_PATH> \
+  --tensor-parallel-size 8
+```
+A judge model (paper uses `Qwen3-Next-80B-A3B-Thinking`) scores each sample on three
+dimensions and assigns `overall_quality`. `--output-jsonl` gets every row plus its
+`evaluation` dict; `--filtered-jsonl` (optional) gets only rows whose `overall_quality`
+is in `--keep-levels` (default `high`) — this is the high-quality training subset
+(the paper retains ~1/6). Runs a per-level retention summary at the end.
+
+**7. Train** — feed the labeled (and quality-filtered) JSONL to [`../train/README.md`](../train/README.md).
 
 ---
 
@@ -78,5 +100,6 @@ python -m data_pipeline.inference.build_label \
 
 - **qgen.sh** – `./data_pipeline/qgen.sh <DATASET_NAME> <RESULT_DIR> [--model MODEL]`
 - **label.sh** – `./data_pipeline/label.sh <DATASET_NAME> <RESULT_DIR> [--model-name MODEL] ...`
+- **quality.sh** – `./data_pipeline/quality.sh <DATASET_NAME> <RESULT_DIR> [--model-name MODEL] ...`
 
-Both run from repo root and forward extra arguments to the underlying Python module.
+All run from repo root and forward extra arguments to the underlying Python module.
